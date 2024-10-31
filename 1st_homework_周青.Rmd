@@ -1,0 +1,281 @@
+---
+title: "1st_assignment_eda_Hoki_Chow"
+author: "周青"
+date: "2024-10-27"
+output:
+pdf_document:
+latex_engine: xelatex
+word_document:
+toc: yes
+html_document:
+code_folding: show
+fig_caption: yes
+fig_width: 10
+highlight: tango
+number_sections: yes
+theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,error = FALSE, warning = FALSE, message = FALSE,
+                      out.width = "100%", split = FALSE, fig.align = "center")
+#load library
+library(tidyverse)
+library(kableExtra)
+library(lubridate)
+library(scales)
+library(plotly)
+library(patchwork)
+library(ggrepel)
+library(knitr)
+library(kableExtra)
+```
+
+## 仓库中data目录下是来自某二手房网站有关武汉的3000套二手房的信息,请利用你掌握的描述性统计方法，对数据进行探索性数据分析，可以讨论的问题包括（但不限于）：价格特点、区位特点、建筑形式、以及这些变量的组合分析等。
+
+# 你的主要发现
+
+1.  发现1：建筑面积与房产总价对数呈正相关，区域发展潜力也影响房产总价，这些正相关关系反映房地产市场定价规律，为价格评估和预测提供依据。
+
+2.  发现2：装修情况对房产单价有显著影响，精装修能提升单价，开发商和卖家可通过高质量精装修增加附加值，而楼层高度对单价影响不大。
+
+3.  发现3：随时看房和 VR 看房的显著性体现了看房者对看房便利性的重视，前者可灵活安排时间、减少协调麻烦，后者利用现代科技让看房者在初步筛选阶段直观了解房屋、节省精力。靠近地铁在购房或租房决策中有显著影响，它代表的交通便利性可减少通勤成本和时间，表明大部分看房者可能是上班族或对交通便捷有高要求的人群，房产周边交通设施吸引力大。
+
+# 数据介绍
+
+本报告**链家**数据获取方式如下：
+
+报告人在2023年9月12日获取了[链家武汉二手房网站](https://wh.lianjia.com/ershoufang/)数据。
+
+-   链家二手房网站默认显示100页，每页30套房产，因此本数据包括3000套房产信息；
+
+-   数据包括了页面可见部分的文本信息，具体字段及说明见作业说明。
+
+**说明：**数据仅用于教学；由于不清楚链家数据的展示规则，因此数据可能并不是武汉二手房市场的随机抽样，结论很可能有很大的偏差，甚至可能是错误的。
+
+```{r}
+lj1 <- read.csv("1st_assignment_eda-Hoki-Chow/data/2023-09-12_cleaned.csv")
+theme_set(theme(text = element_text(size = 10)))
+```
+
+# 数据概览
+
+数据表(lj1)共包括`r names(lj1)`等`r ncol(lj1)`个变量,共`r nrow(lj1)`行。表的前10行示例如下：
+
+```{r}
+lj1 %>% 
+  head(10) %>%
+  kable(caption = "武汉链家二手房") %>% 
+  kable_styling()
+```
+
+
+各变量的简短信息：
+
+```{r}
+glimpse(lj1)
+```
+
+各变量的简短统计：
+
+```{r}
+summary(lj1)
+str(lj1)
+```
+
+可以看到：
+
+-   直观结论1：数据中共有11个字符型变量，2个数值型变量，5个整数型变量。
+
+-   直观结论2：数据从房屋单价1771元到44656元，房屋面积从22.77平方米到588.66平方米，两项数据的极值较大，房屋类型丰富。
+
+# 探索性分析
+
+## 房屋区域的数值描述与图形
+
+```{r}
+library(jiebaR)
+library(wordcloud2)
+
+lj_region<-lj1%>%group_by(property_region)%>%
+  summarise(n=n())%>%
+  mutate(rank=min_rank(desc(n)))%>%
+  arrange(n)
+
+wordcloud2(freq(lj1$property_region),size = 0.7,minRotation = -pi/4, maxRotation = pi/4)
+```
+
+发现：
+
+-   发现1：小区所处区域主要集中在白沙洲、盘龙城、四新、光谷东附近。推断这几个区域的城市主要服务设施较多，或是城市中心的商务区附近，所以房屋分布比较密集。
+
+-   发现2：房屋的集中出现和区域从中心向外沿扩张可以看出城市的发展趋势，白沙洲、盘龙城、四新、光谷东等热门的区域可能有旧房改造和政府重点规划的新城或者开发区。
+
+## 房屋装修情况的数值描述与图形
+
+```{r}
+#房屋装修的比例
+frequency_decoration <- table(lj1$decoration)
+labels <- names(frequency_decoration)
+df <- data.frame(text = names(frequency_decoration), frequency = as.vector(frequency_decoration))
+df$proportion <- df$frequency / sum(df$frequency)
+ggplot(df, aes(x = "", y = proportion, fill = text)) +
+    geom_bar(stat = "identity") +
+    coord_polar("y") +
+    labs(title = "房屋装修情况饼状图",fill = "房屋装修情况")
+```
+
+发现：
+
+-   发现1：二手房交易市场大部分房子是已经装修过的，这一定程度上反映了城市实际居住人口多，城市经济发达。经济发达区域的购房者可能更注重时间成本和生活品质，房产投资者在这些区域也更倾向于将房子装修后再出租或出售，以获取更高的收益。
+
+## 房屋主要朝向情况的数值描述与图形
+
+```{r}
+frequency_directions1 <- table(lj1$directions1)
+labels <- names(frequency_directions1)
+df <- data.frame(text = names(frequency_directions1), frequency = as.vector(frequency_directions1))
+df$proportion <- df$frequency / sum(df$frequency)
+ggplot(df, aes(x = "", y = proportion, fill = text)) +
+    geom_bar(stat = "identity") +
+    coord_polar("y") +
+    labs(title = "房屋主要朝向情况饼状图",fill = "房屋主要朝向")
+```
+
+发现：
+
+-   发现1：大部分房子的主要朝向是向西，其次是朝南方向。这也和城市人群在房屋中实际居住时间多半为下午和晚上有关，房屋主要朝西意味着在下午和傍晚能够获得较多的阳光照射，阳光能够深入室内，提供良好的自然采光和热量。
+
+## 房屋总价的数值描述与图形
+
+```{r}
+ggplot(lj1,aes(price_ttl))+
+  geom_density(color="black")
+
+ggplot(lj1,aes(price_ttl))+
+  geom_histogram(bins = 50,aes(x=price_ttl,y=..count..),fill="lightblue",color="black")
+```
+
+发现：
+
+-   发现1：房屋总价的密度分布函数呈右偏趋势，从数据分布的角度看，右偏分布存在一个长长的“尾巴”，代表高价值房产。大部分房屋价格集中在较低到中等的价位区间，而有少数高价值房产拉高了整体的价格分布。
+
+-   发现2：房屋总价的右偏分布在一定程度上反映了社会经济的不平等。高价值房产的拥有者往往具有更高的经济实力，而大部分居民只能购买价格较低的房产。这种差异可能与居民的收入分配不均有关，也反映了房地产市场在财富分配中的作用。
+
+## 探索问题1：不同区域和建筑面积对房产总价格影响
+
+```{r}
+skimr::skim(lj1)#粗略的看图表的数据分布特征
+
+ggplot(lj1, aes(x = property_region, y = price_ttl)) +
+       geom_boxplot()
+ggplot(lj1, aes(x = building_area, y = price_ttl)) +
+       geom_point()
+
+model_area <- lm(price_ttl ~ building_area, data = lj1)
+summary(model_area)
+
+residuals_area <- residuals(model_area)
+fitted_values_area <- fitted(model_area)
+plot(fitted_values_area, residuals_area)
+abline(h = 0, lty = 2)
+
+#残差呈现漏斗形，违反了方差齐性的假设，需要对数据进行变换或者使用其他更合适的模型。
+
+model_area_lg <- lm(log10(price_ttl) ~ building_area, data = lj1)
+summary(model_area_lg)
+
+residuals_area_lg <- residuals(model_area_lg)
+fitted_values_area_lg <- fitted(model_area_lg)
+plot(fitted_values_area_lg, residuals_area_lg)
+abline(h = 0, lty = 2)
+
+#建筑面积与总价的对数呈正相关
+
+library(car)
+real_estate_matrix <- model.matrix(log10(price_ttl) ~ property_region + building_area, data = lj1)
+model_full <- lm(log10(lj1$price_ttl) ~., data = as.data.frame(real_estate_matrix))
+summary(model_full)
+
+residuals_full <- residuals(model_full)
+fitted_values_full <- fitted(model_full)
+plot(fitted_values_full, residuals_full)
+abline(h = 0, lty = 2)
+
+#建筑面积、房产分布区域与房产总价的对数呈显著的正相关关系
+```
+
+发现：
+
+-   发现1：建筑面积与房产总价的对数呈正相关，这意味着在其他条件相同的情况下，建筑面积越大，房产总价越高。从经济角度看，房产面积的增加带来了价值的超比例增长（因为是对数关系）。例如，可能每增加一定比例的建筑面积，房产总价会以一个相对稳定的比例增长。这可能是由于较大的空间能满足更多的功能需求，如容纳更多的居住人口、提供更宽敞的商业经营场所等，从而使得其价值提升。
+
+-   发现2：暗示区域的发展潜力不同。具有良好经济发展前景、城市规划重点关注的区域，房产总价往往更高。例如，新兴的商务区或者正在进行大规模城市更新的区域，房产价值可能随着区域的发展而不断提升，从而体现出与房产总价对数的正相关关系。
+
+-   发现3：这种显著的正相关关系反映了房地产市场的定价规律。市场在定价过程中会充分考虑房产的物理属性（建筑面积）和地理位置属性（区域）。消费者和投资者在购买房产时也会基于这些因素来衡量房产的价值，并且这种价值衡量在宏观市场层面上表现为对数形式的正相关关系，为房地产市场的价格评估和预测提供了一定的参考依据。
+
+## 探索问题2：房屋在所在楼栋所处位置、装修情况对房产单价的影响
+
+```{r}
+lj1$property_height <- as.factor(lj1$property_height)
+lj1$decoration <- as.factor(lj1$decoration)
+
+model_2way <- aov(price_sqm ~ property_height + decoration, data = lj1)
+summary(model_2way)
+
+#装修情况对房产单价呈现显著性影响，而房屋楼层高度影响则不显著
+
+TukeyHSD(model_2way, which = "decoration")
+
+#精装和其他类型之间呈现显著性差异
+```
+
+发现：
+
+-   发现1：装修情况对房产单价有显著影响，且精装和其他类型存在显著差异，这表明装修是房产价值的重要驱动因素。精装修的房产能够显著提升房产单价，可能是因为精装修节省了购房者的时间和精力，并且在装修质量、风格统一等方面有一定优势，使得其在市场上更具竞争力，能够获得更高的价格认可。消费者可能更愿意为精装修的房产支付较高的单价，因为精装修的房产在入住时可以直接使用，避免了装修过程中的诸多麻烦，如寻找装修公司、监督施工、选择装修材料等。这也暗示房地产开发商或二手房卖家可以通过提供高质量的精装修来增加房产的附加值。
+
+-   发现2：房屋楼层高度对房产单价影响不显著，说明在市场定价过程中，楼层因素并没有像装修情况那样起到关键作用。这可能是因为在该研究的市场环境中，楼层所带来的优势（如视野好、噪音小等）和劣势（如使用电梯不便、楼层高水压不足等）相互抵消，或者这些因素在消费者购买决策中的权重较低，导致楼层高度没有对房产单价产生显著的分化作用。
+
+## 探索问题3：房屋的便利性因素（如靠近地铁、产证满 2 年、随时看房、支持 VR看房）是否会增加其在网站上的关注度
+
+```{r}
+levels(lj1$near_subway) <- c(levels(lj1$near_subway), "lack")
+lj1$near_subway[is.na(lj1$near_subway)] <- "lack"
+levels(lj1$if_2y) <- c(levels(lj1$if_2y), "lack")
+lj1$if_2y[is.na(lj1$if_2y)] <- "lack"
+levels(lj1$has_key) <- c(levels(lj1$has_key), "lack")
+lj1$has_key[is.na(lj1$has_key)] <- "lack"
+levels(lj1$vr) <- c(levels(lj1$vr), "lack")
+lj1$vr[is.na(lj1$vr)] <- "lack"
+
+lj1$near_subway <- as.factor(lj1$near_subway)
+lj1$if_2y<- as.factor(lj1$if_2y)
+lj1$has_key <- as.factor(lj1$has_key)
+lj1$vr <- as.factor(lj1$vr)
+
+lj1$near_subway <- relevel(lj1$near_subway, ref = "lack")
+lj1$if_2y <- relevel(lj1$if_2y, ref = "lack")
+lj1$has_key <- relevel(lj1$has_key, ref = "lack")
+lj1$vr <- relevel(lj1$vr, ref = "lack")
+
+library(stats)
+model_convenience <- glm(followers ~ near_subway + if_2y + has_key + vr, data = lj1, family = poisson)
+summary(model_convenience)
+
+#靠近地铁、产证满 2 年、随时看房、支持 VR看房对关注人群均有显著性影响
+```
+
+发现：
+
+-   发现1：靠近地铁这一因素有显著影响，说明对于关注看房的人群来说，交通便利性是他们考虑的重要因素。在购房或者租房决策中，靠近地铁意味着更便捷的通勤条件，减少交通成本和时间成本。。
+
+-   发现2：靠近地铁这一因素有显著影响，说明对于关注看房的人群来说，交通便利性是他们考虑的重要因素。在购房或者租房决策中，靠近地铁意味着更便捷的通勤条件，减少交通成本和时间成本。这也反映出大部分看房者可能是上班族或者对交通便捷性有较高要求的人群，房产周边的交通设施对他们的吸引力较大。
+
+-   发现3：随时看房（中介有钥匙）和支持VR看房这两个因素的显著性，体现了看房者对于看房便利性的重视。随时看房为他们提供了更灵活的看房时间安排，不需要等待房东或者其他复杂的协调过程。VR看房则适应了现代科技发展和快节奏生活的需求，能够让看房者在初步筛选阶段通过虚拟现实技术对房屋有一个直观的了解，节省时间和精力。
+
+------------------------------------------------------------------------
+
+# 发现总结
+
+用1-3段话总结你的发现。
+
+通过对武汉链家二手房的数据分析可以看出： 1.在购房或租房决策中，靠近地铁对看房人群有显著影响，交通便利性至关重要，能减少通勤成本和时间，反映出多数看房者可能是上班族或对交通便捷要求高的人。随时看房和VR看房的显著性体现看房者对看房便利性的重视，前者提供灵活安排，后者节省时间精力。 2.装修情况对房产单价有显著影响，精装修能提升单价，因其节省购房者时间精力、质量风格有优势，开发商和卖家可借此增加附加值，而楼层高度对单价影响不显著。 3.建筑面积与房产总价对数呈正相关，面积增加带来价值超比例增长，同时区域发展潜力影响房产总价，发展前景好、受规划关注区域总价更高，这些正相关关系反映房地产市场定价规律，为价格评估和预测提供参考。
